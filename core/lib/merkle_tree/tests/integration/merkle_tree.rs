@@ -132,6 +132,9 @@ fn proofs_are_computed_correctly_for_mixed_instructions() {
     instructions.shuffle(&mut rng);
 
     let output = tree.extend_with_proofs(instructions.clone());
+    eprintln!("old_root_hash = {:?}", old_root_hash);
+    eprintln!("{:#?}", output);
+    eprintln!("expected_hash = {:?}", expected_hash);
     // Check that there are some read ops recorded.
     assert!(output
         .logs

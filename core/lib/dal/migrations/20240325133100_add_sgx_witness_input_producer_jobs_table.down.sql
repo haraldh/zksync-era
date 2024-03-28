@@ -1,0 +1,5 @@
+DROP INDEX IF EXISTS idx_sgx_witness_input_producer_jobs_status_processing_attempts;
+
+DROP TABLE IF EXISTS sgx_witness_input_producer_jobs;
+
+DROP TYPE IF EXISTS sgx_witness_input_producer_job_status;

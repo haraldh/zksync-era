@@ -7,6 +7,7 @@ pub use sqlx::{types::BigDecimal, Error as SqlxError};
 use zksync_db_connection::connection::DbMarker;
 pub use zksync_db_connection::{connection::Connection, connection_pool::ConnectionPool};
 
+use crate::sgx_witness_input_producer_dal::SGXWitnessInputProducerDal;
 use crate::{
     basic_witness_input_producer_dal::BasicWitnessInputProducerDal, blocks_dal::BlocksDal,
     blocks_web3_dal::BlocksWeb3Dal, consensus_dal::ConsensusDal,
@@ -35,6 +36,7 @@ mod models;
 pub mod proof_generation_dal;
 pub mod protocol_versions_dal;
 pub mod protocol_versions_web3_dal;
+pub mod sgx_witness_input_producer_dal;
 pub mod snapshot_recovery_dal;
 pub mod snapshots_creator_dal;
 pub mod snapshots_dal;
@@ -70,6 +72,7 @@ where
     fn transactions_web3_dal(&mut self) -> TransactionsWeb3Dal<'_, 'a>;
 
     fn basic_witness_input_producer_dal(&mut self) -> BasicWitnessInputProducerDal<'_, 'a>;
+    fn sgx_witness_input_producer_dal(&mut self) -> SGXWitnessInputProducerDal<'_, 'a>;
 
     fn blocks_dal(&mut self) -> BlocksDal<'_, 'a>;
 
@@ -139,6 +142,9 @@ impl<'a> CoreDal<'a> for Connection<'a, Core> {
         BasicWitnessInputProducerDal { storage: self }
     }
 
+    fn sgx_witness_input_producer_dal(&mut self) -> SGXWitnessInputProducerDal<'_, 'a> {
+        SGXWitnessInputProducerDal { storage: self }
+    }
     fn blocks_dal(&mut self) -> BlocksDal<'_, 'a> {
         BlocksDal { storage: self }
     }

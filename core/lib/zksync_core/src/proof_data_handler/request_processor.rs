@@ -15,6 +15,7 @@ use zksync_prover_interface::api::{
     ProofGenerationData, ProofGenerationDataRequest, ProofGenerationDataResponse,
     SubmitProofRequest, SubmitProofResponse,
 };
+use zksync_prover_interface::inputs::PrepareBasicCircuitsJob;
 use zksync_types::{
     basic_fri_types::Eip4844Blobs,
     commitment::serialize_commitments,
@@ -99,7 +100,7 @@ impl RequestProcessor {
             None => return Ok(Json(ProofGenerationDataResponse::Success(None))), // no batches pending to be proven
         };
 
-        let blob = self
+        let blob: PrepareBasicCircuitsJob = self
             .blob_store
             .get(l1_batch_number)
             .await

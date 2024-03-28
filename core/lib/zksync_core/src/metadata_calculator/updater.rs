@@ -146,6 +146,12 @@ impl TreeUpdater {
                     .await
                     .expect("failed to create basic_witness_input_producer job");
                 storage
+                    .sgx_witness_input_producer_dal()
+                    .create_sgx_witness_input_producer_job(l1_batch_number)
+                    .await
+                    .expect("failed to create sgx_witness_input_producer job");
+                // Save the proof generation details to Postgres
+                storage
                     .proof_generation_dal()
                     .insert_proof_generation_details(l1_batch_number, object_key)
                     .await;

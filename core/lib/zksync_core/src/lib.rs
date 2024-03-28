@@ -51,6 +51,7 @@ use zksync_types::{
     L2ChainId, PackedEthSignature, ProtocolVersionId,
 };
 
+use crate::sgx_witness_input_producer::SGXWitnessInputProducer;
 use crate::{
     api_server::{
         contract_verification,
@@ -102,6 +103,7 @@ mod metrics;
 pub mod proof_data_handler;
 pub mod proto;
 pub mod reorg_detector;
+pub mod sgx_witness_input_producer;
 pub mod state_keeper;
 pub mod sync_layer;
 pub mod temp_config_store;
@@ -252,6 +254,9 @@ pub enum Component {
     /// Produces input for basic witness generator and uploads it as bin encoded file (blob) to GCS.
     /// The blob is later used as input for Basic Witness Generators.
     BasicWitnessInputProducer,
+    /// Produces input for SGX witness generator and uploads it as bin encoded file (blob) to GCS.
+    /// The blob is later used as input for SGX Witness Generators.
+    SGXWitnessInputProducer,
     /// Component for housekeeping task such as cleaning blobs from GCS, reporting metrics etc.
     Housekeeper,
     /// Component for exposing APIs to prover for providing proof generation data and accepting proofs.
@@ -284,6 +289,9 @@ impl FromStr for Components {
             "housekeeper" => Ok(Components(vec![Component::Housekeeper])),
             "basic_witness_input_producer" => {
                 Ok(Components(vec![Component::BasicWitnessInputProducer]))
+            }
+            "sgx_witness_input_producer" => {
+                Ok(Components(vec![Component::SGXWitnessInputProducer]))
             }
             "eth" => Ok(Components(vec![
                 Component::EthWatcher,
@@ -770,6 +778,24 @@ pub async fn initialize_components(
         .context("add_basic_witness_input_producer_to_task_futures()")?;
     }
 
+    if components.contains(&Component::SGXWitnessInputProducer) {
+        let singleton_connection_pool =
+            ConnectionPool::<Core>::singleton(postgres_config.master_url()?)
+                .build()
+                .await
+                .context("failed to build singleton connection_pool")?;
+        let network_config = configs.network_config.clone().context("network_config")?;
+        add_sgx_witness_input_producer_to_task_futures(
+            &mut task_futures,
+            &singleton_connection_pool,
+            &store_factory,
+            network_config.zksync_network_id,
+            stop_receiver.clone(),
+        )
+        .await
+        .context("add_sgx_witness_input_producer_to_task_futures()")?;
+    }
+
     if components.contains(&Component::Housekeeper) {
         add_house_keeper_to_task_futures(configs, &mut task_futures)
             .await
@@ -1014,6 +1040,32 @@ async fn add_basic_witness_input_producer_to_task_futures(
     );
     let elapsed = started_at.elapsed();
     APP_METRICS.init_latency[&InitStage::BasicWitnessInputProducer].set(elapsed);
+    Ok(())
+}
+
+async fn add_sgx_witness_input_producer_to_task_futures(
+    task_futures: &mut Vec<JoinHandle<anyhow::Result<()>>>,
+    connection_pool: &ConnectionPool<Core>,
+    store_factory: &ObjectStoreFactory,
+    l2_chain_id: L2ChainId,
+    stop_receiver: watch::Receiver<bool>,
+) -> anyhow::Result<()> {
+    // Witness Generator won't be spawned with `ZKSYNC_LOCAL_SETUP` running.
+    // BasicWitnessInputProducer shouldn't be producing input for it locally either.
+    // if std::env::var("ZKSYNC_LOCAL_SETUP") == Ok("true".to_owned()) {
+    //    return Ok(());
+    // }
+    let started_at = Instant::now();
+    tracing::info!("initializing SGXWitnessInputProducer");
+    let producer =
+        SGXWitnessInputProducer::new(connection_pool.clone(), store_factory, l2_chain_id).await?;
+    task_futures.push(tokio::spawn(producer.run(stop_receiver, None)));
+    tracing::info!(
+        "Initialized SGXWitnessInputProducer in {:?}",
+        started_at.elapsed()
+    );
+    let elapsed = started_at.elapsed();
+    APP_METRICS.init_latency[&InitStage::SGXWitnessInputProducer].set(elapsed);
     Ok(())
 }
 

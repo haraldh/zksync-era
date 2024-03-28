@@ -208,8 +208,8 @@
 
             # hardhat solc requires ld-linux
             # Nixos has to fake it with nix-ld
-            NIX_LD_LIBRARY_PATH = lib.makeLibraryPath [ ];
-            NIX_LD = builtins.readFile "${clangStdenv.cc}/nix-support/dynamic-linker";
+            #NIX_LD_LIBRARY_PATH = lib.makeLibraryPath [ ];
+            #NIX_LD = builtins.readFile "${clangStdenv.cc}/nix-support/dynamic-linker";
           };
         };
       });

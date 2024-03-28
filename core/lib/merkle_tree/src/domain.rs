@@ -1,6 +1,8 @@
 //! Tying the Merkle tree implementation to the problem domain.
 
 use rayon::{ThreadPool, ThreadPoolBuilder};
+use serde::{Deserialize, Serialize};
+
 use zksync_crypto::hasher::blake2::Blake2Hasher;
 use zksync_prover_interface::inputs::{PrepareBasicCircuitsJob, StorageLogMetadata};
 use zksync_types::{
@@ -18,7 +20,7 @@ use crate::{
 };
 
 /// Metadata for the current tree state.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TreeMetadata {
     /// Current root hash of the tree.
     pub root_hash: ValueHash,
