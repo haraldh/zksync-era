@@ -6,6 +6,7 @@
 
 use std::{
     fs::{self, File},
+    mem::size_of,
     path::{Path, PathBuf},
 };
 
@@ -14,8 +15,8 @@ use ethabi::{
     Contract, Event, Function,
 };
 use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize};
-use zksync_utils::{bytecode::hash_bytecode, bytes_to_be_words};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use zksync_utils::{be_words_to_bytes, bytecode::hash_bytecode, bytes_to_be_words};
 
 pub mod test_contracts;
 
@@ -250,10 +251,74 @@ fn read_zbin_bytecode_from_path(bytecode_path: PathBuf) -> Vec<u8> {
         .unwrap_or_else(|err| panic!("Can't read .zbin bytecode at {:?}: {}", bytecode_path, err))
 }
 /// Hash of code and code which consists of 32 bytes words
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SystemContractCode {
     pub code: Vec<U256>,
     pub hash: H256,
+}
+
+/// `bincode` `serde` friendly version of `SystemContractCode`
+/// because `U256` will be serialized as a hex string in every case
+/// and `Vec<U256>` would mean double the size
+#[derive(Serialize, Deserialize)]
+struct SystemContractCodeBinSerde {
+    code: Vec<u8>,
+    hash: H256,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SystemContractCodeHumanSerde {
+    code: Vec<U256>,
+    hash: H256,
+}
+
+impl Serialize for SystemContractCode {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        if serializer.is_human_readable() {
+            SystemContractCodeHumanSerde {
+                code: self.code.clone(),
+                hash: self.hash,
+            }
+            .serialize(serializer)
+        } else {
+            SystemContractCodeBinSerde {
+                code: be_words_to_bytes(&self.code),
+                hash: self.hash,
+            }
+            .serialize(serializer)
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for SystemContractCode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        if deserializer.is_human_readable() {
+            let scc_serde = SystemContractCodeHumanSerde::deserialize(deserializer)?;
+            Ok(SystemContractCode {
+                code: scc_serde.code,
+                hash: scc_serde.hash,
+            })
+        } else {
+            let scc_serde = SystemContractCodeBinSerde::deserialize(deserializer)?;
+            let code_len = scc_serde.code.len();
+            if code_len % size_of::<U256>() != 0 {
+                use serde::de::Error;
+                return Err(D::Error::custom(
+                    "Error deserializing SystemContractCode: code bytes not an array of U256",
+                ));
+            }
+            Ok(SystemContractCode {
+                code: bytes_to_be_words(scc_serde.code),
+                hash: scc_serde.hash,
+            })
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
