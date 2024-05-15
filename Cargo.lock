@@ -9317,8 +9317,10 @@ name = "zksync_tee_verifier"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bincode",
  "multivm",
  "serde",
+ "serde_json",
  "tracing",
  "vm_utils",
  "zksync_basic_types",
