@@ -91,7 +91,8 @@ pub(crate) fn new_vm_state<S: WriteStorage, H: HistoryMode>(
                 .base_system_smart_contracts
                 .default_aa
                 .code
-                .clone(),
+                .clone()
+                .into(),
         )],
         Timestamp(0),
     );
@@ -103,7 +104,8 @@ pub(crate) fn new_vm_state<S: WriteStorage, H: HistoryMode>(
                 .base_system_smart_contracts
                 .bootloader
                 .code
-                .clone(),
+                .clone()
+                .into(),
         )],
         Timestamp(0),
     );

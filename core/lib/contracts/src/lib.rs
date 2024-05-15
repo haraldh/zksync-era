@@ -15,7 +15,7 @@ use ethabi::{
 };
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use zksync_utils::{bytecode::hash_bytecode, bytes_to_be_words};
+use zksync_utils::{bytecode::hash_bytecode, bytes_to_be_words, BoxSliceU};
 
 pub mod test_contracts;
 
@@ -252,10 +252,9 @@ fn read_zbin_bytecode_from_path(bytecode_path: PathBuf) -> Vec<u8> {
 /// Hash of code and code which consists of 32 bytes words
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemContractCode {
-    pub code: Vec<U256>,
+    pub code: BoxSliceU<U256>,
     pub hash: H256,
 }
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BaseSystemContracts {
     pub bootloader: SystemContractCode,
@@ -280,7 +279,7 @@ impl BaseSystemContracts {
         let hash = hash_bytecode(&bootloader_bytecode);
 
         let bootloader = SystemContractCode {
-            code: bytes_to_be_words(bootloader_bytecode),
+            code: bytes_to_be_words(bootloader_bytecode).into(),
             hash,
         };
 
@@ -288,7 +287,7 @@ impl BaseSystemContracts {
         let hash = hash_bytecode(&bytecode);
 
         let default_aa = SystemContractCode {
-            code: bytes_to_be_words(bytecode),
+            code: bytes_to_be_words(bytecode).into(),
             hash,
         };
 

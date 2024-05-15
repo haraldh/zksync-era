@@ -1,4 +1,7 @@
+use crate::{be_words_to_bytes, bytes_to_be_words};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use std::ops::Deref;
+use zksync_basic_types::U256;
 
 /// Trait for specifying prefix for bytes to hex serialization
 pub trait Prefix {
@@ -59,6 +62,56 @@ impl<P: Prefix> BytesToHexSerde<P> {
 
 pub type ZeroPrefixHexSerde = BytesToHexSerde<ZeroxPrefix>;
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct BoxSliceU<T>(Box<[T]>);
+
+impl<T> Deref for BoxSliceU<T> {
+    type Target = Box<[T]>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> From<Vec<T>> for BoxSliceU<T> {
+    fn from(value: Vec<T>) -> Self {
+        Self(value.into_boxed_slice())
+    }
+}
+
+impl<T> From<BoxSliceU<T>> for Vec<T> {
+    fn from(value: BoxSliceU<T>) -> Self {
+        value.0.into()
+    }
+}
+
+impl Serialize for BoxSliceU<U256> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        if serializer.is_human_readable() {
+            self.0.serialize(serializer)
+        } else {
+            be_words_to_bytes(&self.0).serialize(serializer)
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for BoxSliceU<U256> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        if deserializer.is_human_readable() {
+            Ok(Self(Box::<[U256]>::deserialize(deserializer)?))
+        } else {
+            Ok(Self(
+                bytes_to_be_words(Vec::<u8>::deserialize(deserializer)?).into_boxed_slice(),
+            ))
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use serde::{Deserialize, Serialize};

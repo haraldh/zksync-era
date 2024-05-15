@@ -347,7 +347,7 @@ pub fn init_vm_inner<S: Storage>(
     oracle_tools.decommittment_processor.populate(
         vec![(
             h256_to_u256(base_system_contract.default_aa.hash),
-            base_system_contract.default_aa.code.clone(),
+            base_system_contract.default_aa.code.clone().into(),
         )],
         Timestamp(0),
     );
@@ -355,7 +355,7 @@ pub fn init_vm_inner<S: Storage>(
     oracle_tools.memory.populate(
         vec![(
             BOOTLOADER_CODE_PAGE,
-            base_system_contract.bootloader.code.clone(),
+            base_system_contract.bootloader.code.clone().into(),
         )],
         Timestamp(0),
     );

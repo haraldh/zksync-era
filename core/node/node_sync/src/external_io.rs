@@ -78,7 +78,7 @@ impl ExternalIO {
 
         Ok(match bytecode {
             Some(bytecode) => SystemContractCode {
-                code: bytes_to_be_words(bytecode),
+                code: bytes_to_be_words(bytecode).into(),
                 hash,
             },
             None => {
@@ -101,7 +101,7 @@ impl ExternalIO {
                     )
                     .await?;
                 SystemContractCode {
-                    code: bytes_to_be_words(contract_bytecode),
+                    code: bytes_to_be_words(contract_bytecode).into(),
                     hash,
                 }
             }

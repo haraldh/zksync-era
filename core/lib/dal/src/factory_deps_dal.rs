@@ -101,7 +101,7 @@ impl FactoryDepsDal<'_, '_> {
             .context("failed loading bootloader code")?
             .with_context(|| format!("bootloader code with hash {bootloader_hash:?} should be present in the database"))?;
         let bootloader_code = SystemContractCode {
-            code: bytes_to_be_words(bootloader_bytecode),
+            code: bytes_to_be_words(bootloader_bytecode).into(),
             hash: bootloader_hash,
         };
 
@@ -112,7 +112,7 @@ impl FactoryDepsDal<'_, '_> {
             .with_context(|| format!("default account code with hash {default_aa_hash:?} should be present in the database"))?;
 
         let default_aa_code = SystemContractCode {
-            code: bytes_to_be_words(default_aa_bytecode),
+            code: bytes_to_be_words(default_aa_bytecode).into(),
             hash: default_aa_hash,
         };
         Ok(BaseSystemContracts {

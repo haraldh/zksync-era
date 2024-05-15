@@ -101,11 +101,11 @@ async fn fetch_base_system_contracts(
         .context("default AA bytecode is missing on main node")?;
     Ok(BaseSystemContracts {
         bootloader: SystemContractCode {
-            code: zksync_utils::bytes_to_be_words(bootloader_bytecode),
+            code: zksync_utils::bytes_to_be_words(bootloader_bytecode).into(),
             hash: contract_hashes.bootloader,
         },
         default_aa: SystemContractCode {
-            code: zksync_utils::bytes_to_be_words(default_aa_bytecode),
+            code: zksync_utils::bytes_to_be_words(default_aa_bytecode).into(),
             hash: contract_hashes.default_aa,
         },
     })
