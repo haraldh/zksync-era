@@ -10,7 +10,7 @@ concurrency:
 
 jobs:
   changed_files:
-    runs-on: [matterlabs-default-infra-runners]
+    runs-on: ubuntu-latest
     name: Test changed-files
     outputs:
       core: ${{ steps.changed-files-yaml.outputs.core_any_changed }}
@@ -39,7 +39,7 @@ jobs:
               - '!prover/**'
   setup:
     name: Setup
-    runs-on: [matterlabs-deployer-stage]
+    runs-on: ubuntu-latest
     outputs:
       image_tag_suffix: ${{ steps.generate-tag-suffix.outputs.image_tag_suffix }}
       prover_fri_cpu_key_id: ${{ steps.extract-prover-fri-setup-key-ids.outputs.cpu_short_commit_sha }}
@@ -54,64 +54,10 @@ jobs:
           ts=$(date +%s%N | cut -b1-13)
           echo "image_tag_suffix=${sha}-${ts}" >> $GITHUB_OUTPUT
 
-      - name: Generate outputs with Prover FRI setup data keys IDs
-        id: extract-prover-fri-setup-key-ids
-        run: |
-          ./prover/extract-setup-data-keys.sh >> $GITHUB_OUTPUT
-
-
-  build-push-core-images:
-    name: Build and push images
-    needs: [setup, changed_files]
-    uses: ./.github/workflows/build-core-template.yml
-    if: needs.changed_files.outputs.core == 'true' || needs.changed_files.outputs.all == 'true'
-    with:
-      image_tag_suffix: ${{ needs.setup.outputs.image_tag_suffix }}
-    secrets:
-      DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
   build-push-tee-prover-images:
     name: Build and push images
     needs: [ setup, changed_files ]
     uses: ./.github/workflows/build-tee-prover-template.yml
-    if: needs.changed_files.outputs.core == 'true' || needs.changed_files.outputs.all == 'true'
     with:
       image_tag_suffix: ${{ needs.setup.outputs.image_tag_suffix }}
-    secrets:
-      DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-
-  build-push-contract-verifier:
-    name: Build and push images
-    needs: [ setup, changed_files ]
-    uses: ./.github/workflows/build-contract-verifier-template.yml
-    if: needs.changed_files.outputs.core == 'true' || needs.changed_files.outputs.all == 'true'
-    with:
-      image_tag_suffix: ${{ needs.setup.outputs.image_tag_suffix }}
-    secrets:
-      DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-
-  build-push-prover-images:
-    name: Build and push images
-    needs: [setup, changed_files]
-    uses: ./.github/workflows/build-prover-template.yml
-    if: needs.changed_files.outputs.prover == 'true' || needs.changed_files.outputs.all == 'true'
-    with:
-      image_tag_suffix: ${{ needs.setup.outputs.image_tag_suffix }}
-      ERA_BELLMAN_CUDA_RELEASE: ${{ vars.ERA_BELLMAN_CUDA_RELEASE }}
-      CUDA_ARCH: "60;70;75;89"
-    secrets:
-      DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-
-  build-gar-prover-fri-gpu:
-    name: Build GAR prover FRI GPU
-    needs: [setup, build-push-prover-images]
-    uses: ./.github/workflows/build-prover-fri-gpu-gar.yml
-    if: needs.changed_files.outputs.prover == 'true' || needs.changed_files.outputs.all == 'true'
-    with:
-      setup_keys_id: ${{ needs.setup.outputs.prover_fri_gpu_key_id }}
-      image_tag_suffix: ${{ needs.setup.outputs.image_tag_suffix }}
-      protocol_version: ${{ needs.build-push-prover-images.outputs.protocol_version }}

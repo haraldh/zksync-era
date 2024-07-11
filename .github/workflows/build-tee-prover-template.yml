@@ -4,10 +4,10 @@ on:
     secrets:
       DOCKERHUB_USER:
         description: "DOCKERHUB_USER"
-        required: true
+        required: false
       DOCKERHUB_TOKEN:
         description: "DOCKERHUB_TOKEN"
-        required: true
+        required: false
     inputs:
       image_tag_suffix:
         description: "Optional suffix to override tag name generation"
@@ -23,7 +23,7 @@ jobs:
     name: Build and Push Docker Images
     env:
       IMAGE_TAG_SUFFIX: ${{ inputs.image_tag_suffix }}
-    runs-on: [ matterlabs-ci-runner ]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         if: ${{ github.event_name == 'workflow_dispatch' }}
@@ -57,20 +57,18 @@ jobs:
           echo "IMAGE_NAME=${IMAGE_TAG%:*}" >> "$GITHUB_OUTPUT"
 
       - name: Login to Docker registries
-        if: ${{ inputs.action == 'push' }}
         run: |
-          docker login -u ${{ secrets.DOCKERHUB_USER }} -p ${{ secrets.DOCKERHUB_TOKEN }}
-          gcloud auth configure-docker us-docker.pkg.dev -q
+          echo docker login -u ${{ secrets.DOCKERHUB_USER }} -p ${{ secrets.DOCKERHUB_TOKEN }}
+          echo gcloud auth configure-docker us-docker.pkg.dev -q
 
       - name: Push Docker images
-        if: ${{ inputs.action == 'push' }}
         run: |
           export IMAGE_TAG="${{ steps.build.outputs.IMAGE_TAG }}"
           export IMAGE_NAME="${{ steps.build.outputs.IMAGE_NAME }}"
           for repo in matterlabsrobot us-docker.pkg.dev/matterlabs-infra/matterlabs-docker; do
-            for tag in "${IMAGE_TAG}" "${IMAGE_NAME}:latest" ${IMAGE_NAME}:${IMAGE_TAG_SUFFIX}"; do
-              docker tag "${IMAGE_TAG}" "${repo}/${tag}"
-              docker push "${repo}/${tag}"
+            for tag in "${IMAGE_TAG}" "${IMAGE_NAME}:latest" "${IMAGE_NAME}:${IMAGE_TAG_SUFFIX}"; do
+              echo docker tag "${IMAGE_TAG}" "${repo}/${tag}"
+              echo docker push "${repo}/${tag}"
             done
           done
 
