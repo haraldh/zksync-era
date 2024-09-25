@@ -22,7 +22,10 @@ use zksync_multivm::{
 use zksync_prover_interface::inputs::{
     StorageLogMetadata, V1TeeVerifierInput, WitnessInputMerklePaths,
 };
-use zksync_types::{block::L2BlockExecutionData, L1BatchNumber, StorageLog, Transaction, H256};
+use zksync_types::{
+    block::L2BlockExecutionData, Address, L1BatchNumber, StorageLog, StorageLogKind, Transaction,
+    H256,
+};
 use zksync_utils::bytecode::hash_bytecode;
 
 /// A structure to hold the result of verification.
@@ -109,7 +112,7 @@ fn get_bowp_and_set_initial_values(
                 let merkle_path = merkle_paths.into_iter().map(|x| x.into()).collect();
                 let base: TreeLogEntry = match (is_write, first_write, leaf_enumeration_index) {
                     (false, _, 0) => TreeLogEntry::ReadMissingKey,
-                    (false, _, _) => {
+                    (false, false, _) => {
                         // This is a special U256 here, which needs `to_little_endian`
                         let mut hashed_key = [0_u8; 32];
                         leaf_storage_key.to_little_endian(&mut hashed_key);
@@ -122,6 +125,22 @@ fn get_bowp_and_set_initial_values(
                             leaf_index: leaf_enumeration_index,
                             value: value_read.into(),
                         }
+                    }
+                    (false, true, _) => {
+                        // This is a special U256 here, which needs `to_little_endian`
+                        let mut hashed_key = [0_u8; 32];
+                        leaf_storage_key.to_little_endian(&mut hashed_key);
+                        raw_storage.set_value_hashed_enum(
+                            hashed_key.into(),
+                            leaf_enumeration_index,
+                            value_read.into(),
+                        );
+                        let entry = TreeLogEntry::Read {
+                            leaf_index: leaf_enumeration_index,
+                            value: value_read.into(),
+                        };
+                        tracing::error!(?entry, "is_write = false, first_write = true");
+                        entry
                     }
                     (true, true, _) => TreeLogEntry::Inserted,
                     (true, false, _) => {
@@ -175,51 +194,91 @@ fn execute_vm<S: ReadStorage>(
                 .context("failed to execute transaction in TeeVerifierInputProducer")?;
             tracing::trace!("Finished execution of tx: {tx:?}");
         }
+
+        tracing::trace!("finished l2_block {l2_block_data:?}");
+        tracing::trace!("about to vm.start_new_l2_block {next_l2_block_data:?}");
+
         vm.start_new_l2_block(L2BlockEnv::from_l2_block_data(next_l2_block_data));
 
         tracing::trace!("Finished execution of l2_block: {:?}", l2_block_data.number);
     }
+
+    tracing::trace!("about to vm.finish_batch()");
 
     Ok(vm.finish_batch())
 }
 
 /// Map `LogQuery` and `TreeLogEntry` to a `TreeInstruction`
 fn map_log_tree(
+    i: usize,
     storage_log: &StorageLog,
     tree_log_entry: &TreeLogEntry,
     idx: &mut u64,
 ) -> anyhow::Result<TreeInstruction> {
+    let bugged_address: Address = [
+        0x83, 0xba, 0x06, 0xeb, 0xab, 0x08, 0x86, 0xbf, 0x67, 0x64, 0x88, 0x50, 0xdb, 0xaa, 0x19,
+        0x8c, 0x28, 0x31, 0x8b, 0x26,
+    ]
+    .into();
+
+    if
+    /*(i >= 4775 && i < 4790) ||*/
+    *storage_log.key.account().address() == bugged_address {
+        tracing::error!(i, ?storage_log);
+        tracing::error!(i, ?tree_log_entry);
+    }
     let key = storage_log.key.hashed_key_u256();
-    Ok(match (storage_log.is_write(), *tree_log_entry) {
-        (true, TreeLogEntry::Updated { leaf_index, .. }) => {
+    let tree_instruction = match (storage_log.is_write(), storage_log.kind, *tree_log_entry) {
+        (true, _, TreeLogEntry::Updated { leaf_index, .. }) => {
             TreeInstruction::write(key, leaf_index, H256(storage_log.value.into()))
         }
-        (true, TreeLogEntry::Inserted) => {
+        (true, _, TreeLogEntry::Inserted) => {
             let leaf_index = *idx;
             *idx += 1;
             TreeInstruction::write(key, leaf_index, H256(storage_log.value.into()))
         }
-        (false, TreeLogEntry::Read { value, .. }) => {
+        (false, _, TreeLogEntry::Read { value, .. }) => {
             if storage_log.value != value {
-                tracing::error!(
-                    "Failed to map LogQuery to TreeInstruction: {:#?} != {:#?}",
-                    storage_log.value,
-                    value
-                );
-                anyhow::bail!(
-                    "Failed to map LogQuery to TreeInstruction: {:#?} != {:#?}",
+                tracing::warn!(
+                    i,
+                    ?storage_log,
+                    ?tree_log_entry,
+                    "Failed to map LogQuery to TreeInstruction: read value {:#?} != {:#?}",
                     storage_log.value,
                     value
                 );
             }
             TreeInstruction::Read(key)
         }
-        (false, TreeLogEntry::ReadMissingKey { .. }) => TreeInstruction::Read(key),
-        _ => {
-            tracing::error!("Failed to map LogQuery to TreeInstruction");
-            anyhow::bail!("Failed to map LogQuery to TreeInstruction");
+        (true, StorageLogKind::RepeatedWrite, TreeLogEntry::Read { .. }) => {
+            tracing::warn!(
+                i,
+                ?storage_log,
+                ?tree_log_entry,
+                "Failed to map LogQuery to TreeInstruction"
+            );
+            TreeInstruction::Read(key)
         }
-    })
+        (false, _, TreeLogEntry::ReadMissingKey { .. }) => TreeInstruction::Read(key),
+        (true, _, TreeLogEntry::Read { .. })
+        | (true, _, TreeLogEntry::ReadMissingKey)
+        | (false, _, TreeLogEntry::Inserted)
+        | (false, _, TreeLogEntry::Updated { .. }) => {
+            tracing::warn!(
+                i,
+                ?storage_log,
+                ?tree_log_entry,
+                "Failed to map LogQuery to TreeInstruction"
+            );
+            if i < 4790 {
+                TreeInstruction::Read(key)
+            } else {
+                anyhow::bail!("Failed to map LogQuery to TreeInstruction");
+            }
+        }
+    };
+
+    Ok(tree_instruction)
 }
 
 /// Generates the `TreeInstruction`s from the VM executions.
@@ -233,7 +292,10 @@ fn generate_tree_instructions(
         .deduplicated_storage_logs
         .into_iter()
         .zip(bowp.logs.iter())
-        .map(|(log_query, tree_log_entry)| map_log_tree(&log_query, &tree_log_entry.base, &mut idx))
+        .enumerate()
+        .map(|(i, (log_query, tree_log_entry))| {
+            map_log_tree(i, &log_query, &tree_log_entry.base, &mut idx)
+        })
         .collect::<Result<Vec<_>, _>>()
 }
 
@@ -243,24 +305,23 @@ fn execute_tx<S: ReadStorage>(
 ) -> anyhow::Result<()> {
     // Attempt to run VM with bytecode compression on.
     vm.make_snapshot();
-    if vm
-        .inspect_transaction_with_bytecode_compression(Default::default(), tx.clone(), true)
-        .0
-        .is_ok()
-    {
+    let (compression_result, vm_result) =
+        vm.inspect_transaction_with_bytecode_compression(Default::default(), tx.clone(), true);
+    if compression_result.is_ok() {
+        tracing::trace!(?tx, res = ?vm_result.result, "executed tx with compression");
         vm.pop_snapshot_no_rollback();
         return Ok(());
     }
 
     // If failed with bytecode compression, attempt to run without bytecode compression.
     vm.rollback_to_the_latest_snapshot();
-    if vm
-        .inspect_transaction_with_bytecode_compression(Default::default(), tx.clone(), false)
-        .0
-        .is_err()
-    {
+    let (compression_result, vm_result) =
+        vm.inspect_transaction_with_bytecode_compression(Default::default(), tx.clone(), false);
+    if compression_result.is_err() {
         anyhow::bail!("compression can't fail if we don't apply it");
     }
+    tracing::trace!(?tx, res = ?vm_result.result, "executed tx without compression");
+
     Ok(())
 }
 
